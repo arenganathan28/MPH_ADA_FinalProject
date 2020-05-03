@@ -1,0 +1,282 @@
+---
+title: 'ADA Final Project: HPV and Insurance Status'
+author: "Anjana Renganathan"
+date: "April 29, 2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#INSTALL ALL PACKAGES
+#install.packages("RNHANES")
+#install.packages("dplyr")
+#install.packages("tidyverse")
+#install.packages("survey")
+#install.packages("jtools")
+#install.packages("dataMaid")
+#install.packages("expss")
+
+#LOAD LIBRARIES
+library(RNHANES) #package used to download NHANES data directly from the website
+library(survey)#package used for complex survey design and analysis, incorporates weights
+library(dplyr) #package used for recoding
+library(tidyverse) #package used for recoding
+library(tableone)
+
+#these two libraries interfere with earlier parts and so are loaded later at line 179, 255 and 256
+            #library(jtools) #to clean up multivariate logistic regression outputs (you can specifically request OR, 95% CI)
+            #library(dataMaid) #for codebook creation
+            #library(expss) #for filling out codebook labels and descriptions
+
+#download NHANES data
+nhn.hpv <- nhanes_load_data(c("DEMO", "IMQ", "HIQ"), c("2013-2014", "2013-2014", "2013-2014"), cache = "./nhanes_data")
+```
+
+
+```{r selecting variables, echo=FALSE}
+#select only necessary variables
+demo <- nhn.hpv$DEMO %>%
+  select(SEQN, SDDSRVYR, SDMVPSU, WTINT2YR, SDMVSTRA,  RIDRETH3, RIDAGEYR, INDFMPIR, DMDEDUC2)
+
+imq <- nhn.hpv$IMQ %>%
+  select(SEQN, IMQ040, IMQ070)
+
+hiq <- nhn.hpv$HIQ %>%
+  select(SEQN, HIQ011)
+
+#merge datasets
+hpv.subset <- demo %>%
+  full_join(imq, by="SEQN") %>%
+  full_join(hiq, by="SEQN")
+
+```
+
+```{r recoding, echo=FALSE}
+#data recoding and management
+hpv.clean<- hpv.subset %>% 
+  rename(age=RIDAGEYR)%>% #age
+  mutate(RIDRETH3 = recode_factor(.x=RIDRETH3,   #ethnicity
+                                  `1`= 'Mexican',
+                                  `2`='Other Hispanic',
+                                  `3`= 'White',
+                                  `4`='African American',
+                                  `6` = 'Asian',
+                                  `7` = 'Other incld Multiracial'))%>%
+  rename(race.eth=RIDRETH3) %>%    
+  mutate(DMDEDUC2= recode_factor(.x=DMDEDUC2,   #education
+                                 `1`='<9th',
+                                 `2`= '9th to 11th',
+                                 `3`= 'HS grad/GED',
+                                 `4`= 'Some College/AA',
+                                 `5`= 'College Grad or above',
+                                 `7`=NA_character_,
+                                 `9`=NA_character_))%>%
+  rename(educ=DMDEDUC2) %>%
+  rename(pir=INDFMPIR) %>% #income to poverty ratio
+  mutate(HIQ011= recode_factor(.x=HIQ011,  #health insurance
+                               `1`='Yes',
+                               `2`='No',
+                               `7`=NA_character_,
+                               `9`=NA_character_))%>%
+  rename(h.insur=HIQ011)%>%
+  replace_na(list(IMQ040="", IMQ070=""))%>%   #combine IMQ040 (fem) AND IMQ070 (male) with unite 
+  unite("hpv", IMQ040:IMQ070, remove = FALSE, sep = "")%>%
+  mutate(hpv= recode_factor(.x=hpv,  #hpv vacc?
+                               `1`='Yes',
+                               `2`='No',
+                               `7`=NA_character_,
+                               `9`=NA_character_))
+
+hpv.clean$hpv <- replace(hpv.clean$hpv, hpv.clean$hpv=="", NA_character_)
+hpv.clean$hpv <- factor(hpv.clean$hpv)
+
+summary(hpv.clean)
+
+#defining variables to include in the complete data set
+myvars <- c("SEQN","SDDSRVYR", "SDMVPSU", "WTINT2YR", "SDMVSTRA", "age", "race.eth", "educ", "pir", "h.insur", "hpv")
+
+#subsetting by those variables
+hpv_cc<-hpv.clean[myvars]
+
+#omitting NA's in the data set
+hpv_cc<-na.omit(hpv_cc)
+
+#checking to make sure there are no NA's
+summary(hpv_cc)
+
+#final count of participants in complete case set
+count(hpv_cc)
+
+```
+```{r svydesign, include=FALSE}
+#account for complex survey design
+svydsgn.hpv <- svydesign(data = hpv_cc,
+                     id=~SDMVPSU,
+                     strata = ~SDMVSTRA,
+                     weights = ~WTINT2YR,
+                     nest=TRUE)
+#subset by HPV vaccination status
+svydsgn.yes <- subset(svydsgn.hpv,
+                      hpv=="Yes",
+                      options(na.action="na.pass"))
+svydsgn.no<-subset(svydsgn.hpv,
+                   hpv=="No",
+                   options(na.action="na.pass"))
+```
+
+```{r descr stats and chi-sq, echo=FALSE}
+#age
+svymean(~age, svydsgn.yes)
+svymean(~age, svydsgn.no)
+#calculate standard deviation, called 'variance' below
+sqrt(svyvar(~age, svydsgn.yes))
+sqrt(svyvar(~age, svydsgn.no))
+
+#race.eth
+svymean(~race.eth, svydsgn.yes)*100
+svymean(~race.eth, svydsgn.no)*100
+
+#educ
+svymean(~educ, svydsgn.yes)*100
+svymean(~educ, svydsgn.no)*100
+
+#h.insur
+svymean(~h.insur, svydsgn.yes)*100
+svymean(~h.insur, svydsgn.no)*100
+
+#pir
+svyquantile(~pir, svydsgn.yes, c(0.25, 0.5,0.75))
+svyquantile(~pir, svydsgn.no, c(0.25,0.5,0.75))
+
+#chi-sq tests for diff btwn HPV vacc status
+svychisq(~age+hpv, design=svydsgn.hpv,statistic=c("Chisq"), na.rm=TRUE) #signf <0.0001
+svychisq(~race.eth+hpv, design=svydsgn.hpv,statistic=c("Chisq"), na.rm=TRUE) # nonsign
+svychisq(~educ+hpv, design=svydsgn.hpv,statistic=c("Chisq"), na.rm=TRUE) #signf <0.0011
+svychisq(~h.insur+hpv, design=svydsgn.hpv,statistic=c("Chisq"), na.rm=TRUE) #signf <0.05
+svychisq(~pir+hpv, design=svydsgn.hpv,statistic=c("Chisq"), na.rm=TRUE) #not signf
+
+```
+
+```{r logreg, echo=FALSE}
+#recode to binary
+log.prep.hpv <- hpv_cc%>%
+  mutate(hpv = recode(hpv,
+                        'Yes'=1,
+                        'No'=0))
+
+#set references
+log.prep.hpv$race.eth<- relevel(hpv_cc$race.eth, ref = "White")
+log.prep.hpv$educ<- relevel(hpv_cc$educ, ref = "HS grad/GED")
+log.prep.hpv$h.insur <- relevel(hpv_cc$h.insur, ref = "Yes")
+
+#redo svydsgn
+svydsgn.hpv <- svydesign(data = log.prep.hpv,
+                     id=~SDMVPSU,
+                     strata = ~SDMVSTRA,
+                     weights = ~WTINT2YR,
+                     nest=TRUE)
+#logistic regression
+hpv.logreg <- svyglm(hpv~age+race.eth+educ+h.insur+pir, design=svydsgn.hpv, family=quasibinomial())
+
+#then produce the stats with jtools
+library(jtools)
+summ(hpv.logreg,
+     exp=TRUE,
+     confint=TRUE,
+     model.fit = TRUE,
+     model.info = TRUE,
+     digits=2,
+     vifs = TRUE)
+
+#VIF cutoff set at 10
+#evidence of multicollinearity for race (74.89) and education(182.31)
+
+```
+
+
+```{r wald, echo=FALSE}
+#wald test
+#age
+regTermTest(hpv.logreg, "age") #0.0018
+#race.eth
+regTermTest(hpv.logreg, "race.eth") #not signf
+#educ
+regTermTest(hpv.logreg, "educ") # not signf 0.059
+#h.insur
+regTermTest(hpv.logreg, "h.insur") #0.021
+#pir
+regTermTest(hpv.logreg, "pir") #not signf
+```
+
+
+```{r assumption, echo=FALSE}
+#ASSUMPTIONS
+
+#1.Multicollinearity
+      #check VIF column in logistic regression summary on line 186
+      #evidence of multicollinearity for race/ethnicity and education level
+
+#2.Linearity
+#age - MET
+logodds.hpv.age<- log(x=hpv.logreg$fitted.values/(1-hpv.logreg$fitted.values))
+
+lin.hpv.age <- data.frame(logodds.hpv.age, age=hpv.logreg$model$age)
+
+lin.hpv.age %>% 
+  ggplot(aes(x=age, y=logodds.hpv.age))+
+  geom_point(aes(size="Observation"), color = "gray60", alpha= 0.6)+
+  geom_smooth(se=FALSE, aes(color= "Loess curse")) +
+  geom_smooth(method = lm, se= FALSE, aes(color= "Linear"))+
+  theme_minimal()+
+  labs(x="Age", y="Log-odds of predicted probability of getting vaccinated for HPV") +
+  scale_color_manual(name="Type of Fit Line", values=c("dodgerblue2", "deeppink"))+
+  scale_size_manual(values = 1.5, name="")
+
+#pir - MET
+logodds.hpv.pir<- log(x=hpv.logreg$fitted.values/(1-hpv.logreg$fitted.values))
+
+lin.hpv.pir <- data.frame(logodds.hpv.pir, pir=hpv.logreg$model$pir)
+
+lin.hpv.pir %>% 
+  ggplot(aes(x=pir, y=logodds.hpv.pir))+
+  geom_point(aes(size="Observation"), color = "gray60", alpha= 0.6)+
+  geom_smooth(se=FALSE, aes(color= "Loess curse")) +
+  geom_smooth(method = lm, se= FALSE, aes(color= "Linear"))+
+  theme_minimal()+
+  labs(x="Ratio of Family Income to Poverty", y="Log-odds of predicted probability of recieving all 3 HPV vaccine doses") +
+  scale_color_manual(name="Type of Fit Line", values=c("dodgerblue2", "deeppink"))+
+  scale_size_manual(values = 1.5, name="")
+```
+
+
+```{r codebook, echo=FALSE}
+#bring in necessary packages for codebook creation
+library(dataMaid) 
+library(expss) 
+#relabel hpv
+hpv.cdbk <- log.prep.hpv%>%
+  mutate(hpv = recode_factor(.x=hpv,
+                        `1`='Yes',
+                        `0`='No'))
+summary(hpv.cdbk)
+#add descriptives for the codebook
+hpv.cdbk = apply_labels(hpv.cdbk,
+                            SEQN= "Respondent sequence number.",
+                            SDDSRVYR= "Data release number.",
+                            SDMVPSU= "Masked variance Pseudo-PSU.",
+                            SDMVSTRA= "Masked variance Pseudo-Stratum.",
+                            WTINT2YR = "Full sample 2 year Interview Weight.",
+                            race.eth = "Race/Hispanic origin with Non-Hispanic Asian",
+                            age= "Age at screening adjudicated.",
+                            educ= "Education Level - Adults 20+",
+                            pir= "Ratio of family income to poverty",
+                            h.insur = "Covered by health insurance.",
+                            hpv = "Received HPV vaccine- combined male and female variables")
+
+
+attr(hpv.cdbk$age, "shortDescription") <- "Age in years of the sample person at time of screening. Individuals 80 and over are topcoded at 80 years of age."
+attr(hpv.cdbk$pir, "shortDescription") <- "A ratio of family income to poverty guidelines"
+
+#run this to create a codebook
+#makeCodebook(hpv.cdbk, replace=TRUE)
+```
