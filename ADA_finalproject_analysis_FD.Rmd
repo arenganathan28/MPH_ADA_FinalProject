@@ -248,6 +248,165 @@ lin.hpv.pir %>%
   scale_size_manual(values = 1.5, name="")
 ```
 
+```{r feedback, echo=FALSE}
+#Effect Modification
+#age
+hpv.logreg.age <- svyglm(hpv~age+race.eth+educ+h.insur+pir+age*h.insur, design=svydsgn.hpv, family=quasibinomial())
+summ(hpv.logreg.age,
+     exp=TRUE,
+     confint=TRUE,
+     model.fit = TRUE,
+     model.info = TRUE,
+     digits=2,
+     vifs = TRUE)
+#pir
+hpv.logreg.pir <- svyglm(hpv~age+race.eth+educ+h.insur+pir+pir*h.insur, design=svydsgn.hpv, family=quasibinomial())
+summ(hpv.logreg.pir,
+     exp=TRUE,
+     confint=TRUE,
+     model.fit = TRUE,
+     model.info = TRUE,
+     digits=2,
+     vifs = TRUE)
+#neither age nor pir modify the effect of health insurance on HPV vaccinations
+
+#check race eth
+levels(svydsgn.hpv$variables$race.eth)
+#Stratification for race.eth
+em.aa <- subset(svydsgn.hpv,
+                   race.eth=="African American")
+em.w <- subset(svydsgn.hpv,
+                   race.eth=="White")
+em.m <- subset(svydsgn.hpv,
+                   race.eth=="Mexican")
+em.oh <- subset(svydsgn.hpv,
+                   race.eth=="Other Hispanic")
+em.a <- subset(svydsgn.hpv,
+                   race.eth=="Asian")
+em.oth <- subset(svydsgn.hpv,
+                 race.eth=="Other incld Multiracial")
+
+#aa
+hpv.logreg.aa <- svyglm(hpv~age+educ+h.insur+pir, design=em.aa, family=quasibinomial())
+summ(hpv.logreg.aa,
+     exp=TRUE,
+     confint=TRUE,
+     model.fit = TRUE,
+     model.info = TRUE,
+     digits=2,
+     vifs = TRUE)
+#white
+hpv.logreg.w <- svyglm(hpv~age+educ+h.insur+pir, design=em.w, family=quasibinomial())
+summ(hpv.logreg.w,
+     exp=TRUE,
+     confint=TRUE,
+     model.fit = TRUE,
+     model.info = TRUE,
+     digits=2,
+     vifs = TRUE)
+#mexican
+hpv.logreg.m <- svyglm(hpv~age+educ+h.insur+pir, design=em.m, family=quasibinomial())
+summ(hpv.logreg.m,
+     exp=TRUE,
+     confint=TRUE,
+     model.fit = TRUE,
+     model.info = TRUE,
+     digits=2,
+     vifs = TRUE)
+#oth hisp
+hpv.logreg.oh <- svyglm(hpv~age+educ+h.insur+pir, design=em.oh, family=quasibinomial())
+summ(hpv.logreg.oh,
+     exp=TRUE,
+     confint=TRUE,
+     model.fit = TRUE,
+     model.info = TRUE,
+     digits=2,
+     vifs = TRUE)
+#asian
+hpv.logreg.a <- svyglm(hpv~age+educ+h.insur+pir, design=em.a, family=quasibinomial())
+summ(hpv.logreg.a,
+     exp=TRUE,
+     confint=TRUE,
+     model.fit = TRUE,
+     model.info = TRUE,
+     digits=2,
+     vifs = TRUE)
+#other
+hpv.logreg.oth <- svyglm(hpv~age+educ+h.insur+pir, design=em.oth, family=quasibinomial())
+summ(hpv.logreg.oth,
+     exp=TRUE,
+     confint=TRUE,
+     model.fit = TRUE,
+     model.info = TRUE,
+     digits=2,
+     vifs = TRUE)
+
+
+#Education
+
+levels(svydsgn.hpv$variables$educ)
+#Stratification for race.eth
+em.hs <- subset(svydsgn.hpv,
+                   educ=="HS grad/GED")
+em.9 <- subset(svydsgn.hpv,
+                   educ=="<9th")
+em.11 <- subset(svydsgn.hpv,
+                   educ=="9th to 11th")
+em.some.college <- subset(svydsgn.hpv,
+                   educ=="Some College/AA")
+em.college <- subset(svydsgn.hpv,
+                   educ=="College Grad or above")
+
+#9th
+hpv.logreg.9 <- svyglm(hpv~age+race.eth+h.insur+pir, design=em.9, family=quasibinomial())
+summ(hpv.logreg.9,
+     exp=TRUE,
+     confint=TRUE,
+     model.fit = TRUE,
+     model.info = TRUE,
+     digits=2,
+     vifs = TRUE)
+table(hpv_cc$educ,hpv_cc$h.insur)
+#11th
+hpv.logreg.11 <- svyglm(hpv~age+race.eth+h.insur+pir, design=em.11, family=quasibinomial())
+summ(hpv.logreg.11,
+     exp=TRUE,
+     confint=TRUE,
+     model.fit = TRUE,
+     model.info = TRUE,
+     digits=2,
+     vifs = TRUE)
+#hs
+hpv.logreg.hs <- svyglm(hpv~age+race.eth+h.insur+pir, design=em.hs, family=quasibinomial())
+summ(hpv.logreg.hs,
+     exp=TRUE,
+     confint=TRUE,
+     model.fit = TRUE,
+     model.info = TRUE,
+     digits=2,
+     vifs = TRUE)
+#some college
+hpv.logreg.sc <- svyglm(hpv~age+race.eth+h.insur+pir, design=em.some.college, family=quasibinomial())
+summ(hpv.logreg.sc,
+     exp=TRUE,
+     confint=TRUE,
+     model.fit = TRUE,
+     model.info = TRUE,
+     digits=2,
+     vifs = TRUE)
+#coll
+hpv.logreg.c <- svyglm(hpv~age+race.eth+h.insur+pir, design=em.college, family=quasibinomial())
+summ(hpv.logreg.c,
+     exp=TRUE,
+     confint=TRUE,
+     model.fit = TRUE,
+     model.info = TRUE,
+     digits=2,
+     vifs = TRUE)
+
+```
+
+
 
 ```{r codebook, echo=FALSE}
 #bring in necessary packages for codebook creation
